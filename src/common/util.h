@@ -54,57 +54,6 @@ inline int ReadEnable() {
     return GetPrivateProfileIntW(L"exclusive", L"enable", 1, path);
 }
 
-// ---- 目标软件管理（托盘注入与重启的对象）----
-struct Target {
-    const wchar_t* key;         // config.ini [targets] 键名
-    const wchar_t* exe;         // 进程名
-    const wchar_t* display;     // 菜单显示名
-    const wchar_t* restartArg;  // 重启时附加参数（可为 nullptr）
-    const wchar_t* appPathsKey; // App Paths 注册表子键名
-    const wchar_t* const* candidates;  // 候选安装路径（nullptr 结尾）
-};
-
-inline const wchar_t* const kCloudmusicCandidates[] = {
-    L"D:\\LenovoSoftstore\\Install\\wangyiyunyinyue\\cloudmusic.exe",
-    L"C:\\Program Files (x86)\\NetEase\\CloudMusic\\cloudmusic.exe",
-    L"C:\\Program Files\\NetEase\\CloudMusic\\cloudmusic.exe",
-    L"C:\\Program Files (x86)\\Netease\\CloudMusic\\cloudmusic.exe",
-    L"C:\\Program Files\\Netease\\CloudMusic\\cloudmusic.exe",
-    nullptr};
-inline const wchar_t* const kBilibiliCandidates[] = {
-    L"D:\\bilibili\\哔哩哔哩.exe",
-    L"C:\\Program Files\\bilibili\\哔哩哔哩.exe",
-    L"C:\\Program Files (x86)\\bilibili\\哔哩哔哩.exe",
-    nullptr};
-
-inline const Target kTargets[] = {
-    {L"cloudmusic", L"cloudmusic.exe", L"网易云音乐", L"--enable-exclusive-audio",
-     L"cloudmusic.exe", kCloudmusicCandidates},
-    {L"bilibili", L"哔哩哔哩.exe", L"哔哩哔哩", nullptr, L"哔哩哔哩.exe", kBilibiliCandidates},
-};
-inline size_t TargetCount() { return sizeof(kTargets) / sizeof(kTargets[0]); }
-
-inline int ReadTargetEnabled(size_t idx) {
-    if (idx >= TargetCount()) return 0;
-    wchar_t path[MAX_PATH];
-    ConfigPath(path, MAX_PATH, L"config.ini");
-    return GetPrivateProfileIntW(L"targets", kTargets[idx].key, 1, path);
-}
-
-inline void SetTargetEnabled(size_t idx, int value) {
-    if (idx >= TargetCount()) return;
-    wchar_t path[MAX_PATH];
-    ConfigPath(path, MAX_PATH, L"config.ini");
-    WritePrivateProfileStringW(L"targets", kTargets[idx].key, value ? L"1" : L"0", path);
-}
-
-inline bool IsKnownTargetExe(const wchar_t* exeName) {
-    for (size_t i = 0; i < TargetCount(); ++i) {
-        if (_wcsicmp(exeName, kTargets[i].exe) == 0) return true;
-    }
-    return false;
-}
-
 inline void Log(const wchar_t* fmt, ...) {
     wchar_t line[2048];
     SYSTEMTIME st;

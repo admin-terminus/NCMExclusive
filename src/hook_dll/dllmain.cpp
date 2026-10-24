@@ -28,9 +28,9 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void*) {
             GetModuleFileNameW(nullptr, exe, MAX_PATH);
             const wchar_t* name = wcsrchr(exe, L'\\');
             name = name ? name + 1 : exe;
-            if (!ncmex::IsKnownTargetExe(name)) return TRUE;
+            if (_wcsicmp(name, L"cloudmusic.exe") != 0) return TRUE;
 
-            ncmex::Log(L"[NCMEx] 已注入目标软件 build=20261024-fix13-multi pid=%lu exe=%ls",
+            ncmex::Log(L"[NCMEx] 已注入网易云 build=20261024-fix14-rollback pid=%lu exe=%ls",
                        GetCurrentProcessId(), exe);
             if (HANDLE t = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr)) {
                 CloseHandle(t);

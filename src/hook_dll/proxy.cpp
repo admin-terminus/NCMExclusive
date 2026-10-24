@@ -1033,8 +1033,7 @@ void InstallHooks() {
         const wchar_t* name = wcsrchr(path, L'\\');
         name = name ? name + 1 : path;
         return _wcsicmp(name, L"cloudmusic.exe") == 0 ||
-               _wcsicmp(name, L"cloudmusic.dll") == 0 || _wcsicmp(name, L"libcef.dll") == 0 ||
-               _wcsicmp(name, L"哔哩哔哩.exe") == 0;
+               _wcsicmp(name, L"cloudmusic.dll") == 0 || _wcsicmp(name, L"libcef.dll") == 0;
     };
     const auto hookModule = [&](HMODULE module) {
         int count = 0;

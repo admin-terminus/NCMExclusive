@@ -13,7 +13,6 @@ namespace {
 constexpr UINT kTrayMsg = WM_APP + 1;
 constexpr int kIdEnable = 1001, kIdDisable = 1002, kIdRestart = 1003, kIdLog = 1004,
               kIdAutorun = 1005, kIdExit = 1006, kIdInject = 1007;
-constexpr int kIdTargetBase = 2000;  // kIdTargetBase + idx 切换目标软件
 
 HWND g_hwnd = nullptr;
 HICON g_iconOn = nullptr, g_iconOff = nullptr;
@@ -49,7 +48,7 @@ void UpdateTray(bool enabled) {
     Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
-bool IsTargetRunning(const ncmex::Target& target) {
+bool IsNcmRunning() {
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) return false;
     PROCESSENTRY32W pe{};
@@ -57,7 +56,7 @@ bool IsTargetRunning(const ncmex::Target& target) {
     bool found = false;
     if (Process32FirstW(snapshot, &pe)) {
         do {
-            if (_wcsicmp(pe.szExeFile, target.exe) == 0) {
+            if (_wcsicmp(pe.szExeFile, L"cloudmusic.exe") == 0) {
                 found = true;
                 break;
             }
@@ -67,7 +66,7 @@ bool IsTargetRunning(const ncmex::Target& target) {
     return found;
 }
 
-void RestartTarget(const ncmex::Target& target) {
+void RestartNcm() {
     wchar_t exe[MAX_PATH] = {};
     HANDLE pathSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (pathSnap != INVALID_HANDLE_VALUE) {
@@ -75,7 +74,7 @@ void RestartTarget(const ncmex::Target& target) {
         pe.dwSize = sizeof(pe);
         if (Process32FirstW(pathSnap, &pe)) {
             do {
-                if (_wcsicmp(pe.szExeFile, target.exe) != 0) continue;
+                if (_wcsicmp(pe.szExeFile, L"cloudmusic.exe") != 0) continue;
                 HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
                                              pe.th32ProcessID);
                 if (process) {
@@ -90,19 +89,23 @@ void RestartTarget(const ncmex::Target& target) {
     }
 
     const wchar_t* appPathsKeys[] = {
-        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\",
-        L"SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths\\"};
-    for (const wchar_t* prefix : appPathsKeys) {
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\cloudmusic.exe",
+        L"SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths\\cloudmusic.exe"};
+    for (const wchar_t* key : appPathsKeys) {
         if (exe[0]) break;
-        wchar_t key[512] = {};
-        swprintf(key, 512, L"%ls%ls", prefix, target.appPathsKey);
         DWORD type = 0, size = sizeof(exe);
         RegGetValueW(HKEY_LOCAL_MACHINE, key, nullptr, RRF_RT_REG_SZ, &type, exe, &size);
     }
     if (!exe[0]) {
-        for (const wchar_t* const* c = target.candidates; *c; ++c) {
-            if (GetFileAttributesW(*c) != INVALID_FILE_ATTRIBUTES) {
-                wcscpy(exe, *c);
+        const wchar_t* candidates[] = {
+            L"D:\\LenovoSoftstore\\Install\\wangyiyunyinyue\\cloudmusic.exe",
+            L"C:\\Program Files (x86)\\NetEase\\CloudMusic\\cloudmusic.exe",
+            L"C:\\Program Files\\NetEase\\CloudMusic\\cloudmusic.exe",
+            L"C:\\Program Files (x86)\\Netease\\CloudMusic\\cloudmusic.exe",
+            L"C:\\Program Files\\Netease\\CloudMusic\\cloudmusic.exe"};
+        for (const wchar_t* c : candidates) {
+            if (GetFileAttributesW(c) != INVALID_FILE_ATTRIBUTES) {
+                wcscpy(exe, c);
                 break;
             }
         }
@@ -110,13 +113,12 @@ void RestartTarget(const ncmex::Target& target) {
     if (!exe[0]) {
         wchar_t local[MAX_PATH] = {};
         DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH);
-        if (n) swprintf(exe, MAX_PATH, L"%ls\\bilibili\\%ls", local, target.exe);
+        if (n) swprintf(exe, MAX_PATH, L"%ls\\NetEase\\CloudMusic\\cloudmusic.exe", local);
         if (GetFileAttributesW(exe) == INVALID_FILE_ATTRIBUTES) exe[0] = 0;
     }
     if (!exe[0]) {
-        wchar_t msg[512] = {};
-        swprintf(msg, 512, L"未找到 %ls，请手动重启该软件。", target.exe);
-        MessageBoxW(g_hwnd, msg, L"NCMExclusive", MB_ICONWARNING);
+        MessageBoxW(g_hwnd, L"未找到 cloudmusic.exe，请手动重启网易云音乐。", L"NCMExclusive",
+                    MB_ICONWARNING);
         return;
     }
 
@@ -126,7 +128,7 @@ void RestartTarget(const ncmex::Target& target) {
         pe.dwSize = sizeof(pe);
         if (Process32FirstW(snap, &pe)) {
             do {
-                if (_wcsicmp(pe.szExeFile, target.exe) == 0) {
+                if (_wcsicmp(pe.szExeFile, L"cloudmusic.exe") == 0) {
                     if (HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID)) {
                         TerminateProcess(h, 0);
                         CloseHandle(h);
@@ -137,11 +139,9 @@ void RestartTarget(const ncmex::Target& target) {
         CloseHandle(snap);
     }
     Sleep(1000);
-    const bool enable = ncmex::ReadEnable() != 0;
-    const wchar_t* arg = (enable && target.restartArg) ? target.restartArg : nullptr;
-    ncmex::Log(L"[NCMExTray] 重启 %ls -> %ls (arg=%ls)", target.exe, exe,
-               arg ? arg : L"(无)");
-    ShellExecuteW(nullptr, L"open", exe, arg, nullptr, SW_SHOWNORMAL);
+    ShellExecuteW(nullptr, L"open", exe,
+                  ncmex::ReadEnable() ? L"--enable-exclusive-audio" : nullptr, nullptr,
+                  SW_SHOWNORMAL);
 }
 
 void ShowMenu() {
@@ -152,19 +152,11 @@ void ShowMenu() {
     AppendMenuW(menu, MF_STRING | (on ? MF_CHECKED : 0), kIdEnable, L"开启独占模式");
     AppendMenuW(menu, MF_STRING | (!on ? MF_CHECKED : 0), kIdDisable, L"关闭独占模式");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING | MF_DISABLED, 0, L"独占目标（单选）：");
-    for (size_t i = 0; i < ncmex::TargetCount(); ++i) {
-        const ncmex::Target& t = ncmex::kTargets[i];
-        wchar_t label[128] = {};
-        swprintf(label, 128, L"  %ls", t.display);
-        const bool checked = ncmex::ReadTargetEnabled(i) != 0;
-        AppendMenuW(menu, MF_STRING | (checked ? MF_CHECKED : 0), kIdTargetBase + i, label);
-    }
-    AppendMenuW(menu, MF_STRING, kIdRestart, L"重启已选目标");
+    AppendMenuW(menu, MF_STRING, kIdRestart, L"重启网易云音乐");
     AppendMenuW(menu, MF_STRING, kIdLog, L"打开日志目录");
     AppendMenuW(menu, MF_STRING, kIdAutorun, L"开机自启托盘");
     AppendMenuW(menu, MF_STRING | (g_injectEnabled ? MF_CHECKED : 0), kIdInject,
-                L"定向注入");
+                L"定向注入（仅 cloudmusic.exe）");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kIdExit, L"退出");
     SetForegroundWindow(g_hwnd);
@@ -237,9 +229,9 @@ void KillForMaintenance() {
     if (Process32FirstW(snapshot, &pe)) {
         do {
             if (pe.th32ProcessID == self) continue;
-            bool hit = _wcsicmp(pe.szExeFile, L"NCMExTray.exe") == 0;
-            if (!hit) hit = ncmex::IsKnownTargetExe(pe.szExeFile);
-            if (!hit) continue;
+            if (_wcsicmp(pe.szExeFile, L"cloudmusic.exe") != 0 &&
+                _wcsicmp(pe.szExeFile, L"NCMExTray.exe") != 0)
+                continue;
             if (HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID)) {
                 TerminateProcess(process, 0);
                 CloseHandle(process);
@@ -316,9 +308,6 @@ int InstallPackage() {
         WritePrivateProfileStringW(L"exclusive", L"pcm_fallback", L"1", config);
         WritePrivateProfileStringW(L"exclusive", L"balloon", L"1", config);
         WritePrivateProfileStringW(L"exclusive", L"verbose", L"0", config);
-        for (size_t i = 0; i < ncmex::TargetCount(); ++i) {
-            WritePrivateProfileStringW(L"targets", ncmex::kTargets[i].key, L"1", config);
-        }
     }
 
     wchar_t log[MAX_PATH] = {}, previous[MAX_PATH] = {};
@@ -347,7 +336,7 @@ int InstallPackage() {
     }
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
-    ncmex::Log(L"[NCMExTray] 原生安装完成 build=20261024-fix13-multi");
+    ncmex::Log(L"[NCMExTray] 原生安装完成 build=20261024-fix14-rollback");
     return 0;
 }
 
@@ -454,7 +443,7 @@ void InjectProcess(DWORD pid, const wchar_t* path) {
     CloseHandle(process);
 }
 
-bool InjectRunningTargets() {
+bool InjectRunningNcm() {
     if (!g_injectEnabled) return true;
     wchar_t path[MAX_PATH] = {};
     if (!PickInjectDll(path, MAX_PATH)) return false;
@@ -465,12 +454,8 @@ bool InjectRunningTargets() {
     pe.dwSize = sizeof(pe);
     if (Process32FirstW(snapshot, &pe)) {
         do {
-            for (size_t i = 0; i < ncmex::TargetCount(); ++i) {
-                if (!ncmex::ReadTargetEnabled(i)) continue;
-                if (_wcsicmp(pe.szExeFile, ncmex::kTargets[i].exe) == 0) {
-                    InjectProcess(pe.th32ProcessID, path);
-                    break;
-                }
+            if (_wcsicmp(pe.szExeFile, L"cloudmusic.exe") == 0) {
+                InjectProcess(pe.th32ProcessID, path);
             }
         } while (Process32NextW(snapshot, &pe));
     }
@@ -487,38 +472,23 @@ bool StartInjection() {
     g_injectEnabled = true;
     memset(g_injectAttempts, 0, sizeof(g_injectAttempts));
     g_injectAttemptNext = 0;
-    wchar_t names[256] = {};
-    for (size_t i = 0; i < ncmex::TargetCount(); ++i) {
-        if (ncmex::ReadTargetEnabled(i)) {
-            if (names[0]) wcscat(names, L", ");
-            wcscat(names, ncmex::kTargets[i].exe);
-        }
-    }
-    ncmex::Log(L"[NCMExTray] 定向注入已开启（目标: %ls），DLL: %ls", names, path);
-    return InjectRunningTargets();
+    ncmex::Log(L"[NCMExTray] 定向注入已开启（仅 cloudmusic.exe），DLL: %ls", path);
+    return InjectRunningNcm();
 }
 
 void StopInjection() {
     const bool wasEnabled = g_injectEnabled;
     g_injectEnabled = false;
-    if (wasEnabled) ncmex::Log(L"[NCMExTray] 定向注入已停用（已注入的目标软件需重启卸载）");
+    if (wasEnabled) ncmex::Log(L"[NCMExTray] 定向注入已停用（已注入的网易云需重启卸载）");
 }
 
 void ToggleInjection() {
     if (g_injectEnabled) {
         StopInjection();
-        BalloonTip(L"已停用定向注入（已注入的软件需重启卸载）");
+        BalloonTip(L"已停用定向注入（已注入的网易云需重启卸载）");
     } else {
-        if (StartInjection()) BalloonTip(L"定向注入已开启");
+        if (StartInjection()) BalloonTip(L"定向注入已开启，仅处理 cloudmusic.exe");
         else BalloonTip(L"注入开启失败，请查看日志（可能被安全软件拦截）");
-    }
-}
-
-void RestartEnabledTargets(bool onlyRunning) {
-    for (size_t i = 0; i < ncmex::TargetCount(); ++i) {
-        if (!ncmex::ReadTargetEnabled(i)) continue;
-        if (onlyRunning && !IsTargetRunning(ncmex::kTargets[i])) continue;
-        RestartTarget(ncmex::kTargets[i]);
     }
 }
 
@@ -527,43 +497,13 @@ void ToggleExclusive() {
     ncmex::SetEnable(newState ? 1 : 0);
     UpdateTray(newState);
     ncmex::Log(L"[NCMExTray] 用户切换：enable=%d", newState ? 1 : 0);
-    bool anyRunning = false;
-    for (size_t i = 0; i < ncmex::TargetCount(); ++i) {
-        if (ncmex::ReadTargetEnabled(i) && IsTargetRunning(ncmex::kTargets[i])) {
-            anyRunning = true;
-            break;
-        }
-    }
-    if (anyRunning) {
-        BalloonTip(newState ? L"已开启独占模式，正在重启所选软件"
+    if (IsNcmRunning()) {
+        BalloonTip(newState ? L"已开启独占模式，正在重启网易云"
                             : L"已关闭独占模式，正在恢复共享播放");
-        RestartEnabledTargets(true);
+        RestartNcm();
     } else {
-        BalloonTip(newState ? L"已开启独占模式（打开所选软件后生效）"
-                            : L"已关闭独占模式");
+        BalloonTip(newState ? L"已开启独占模式" : L"已关闭独占模式");
     }
-}
-
-void ToggleTarget(size_t idx) {
-    const ncmex::Target& t = ncmex::kTargets[idx];
-    if (ncmex::ReadTargetEnabled(idx)) {
-        // 已选中：单击不取消（单选至少要保留一项）
-        BalloonTip(L"至少保留一个独占目标；如需更换请直接点击另一个");
-        return;
-    }
-    // 单选互斥：先停用其它目标并重启以卸载注入
-    for (size_t j = 0; j < ncmex::TargetCount(); ++j) {
-        if (j == idx || !ncmex::ReadTargetEnabled(j)) continue;
-        ncmex::SetTargetEnabled(j, 0);
-        ncmex::Log(L"[NCMExTray] 目标 %ls -> 0（互斥切换）", ncmex::kTargets[j].exe);
-        if (IsTargetRunning(ncmex::kTargets[j])) RestartTarget(ncmex::kTargets[j]);
-    }
-    ncmex::SetTargetEnabled(idx, 1);
-    ncmex::Log(L"[NCMExTray] 目标 %ls -> 1", t.exe);
-    wchar_t text[256] = {};
-    swprintf(text, 256, L"独占目标已切换为 %ls", t.display);
-    BalloonTip(text);
-    if (IsTargetRunning(t)) RestartTarget(t);  // 重启以套用注入
 }
 
 void SetAutorun(bool enable) {
@@ -595,7 +535,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             break;
         }
         case WM_TIMER:
-            if (wp == kInjectTimer) InjectRunningTargets();
+            if (wp == kInjectTimer) InjectRunningNcm();
             break;
         case kTrayMsg:
             if (lp == WM_LBUTTONUP) ToggleExclusive();
@@ -605,7 +545,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             switch (LOWORD(wp)) {
                 case kIdEnable: if (!ncmex::ReadEnable()) ToggleExclusive(); break;
                 case kIdDisable: if (ncmex::ReadEnable()) ToggleExclusive(); break;
-                case kIdRestart: RestartEnabledTargets(false); break;
+                case kIdRestart: RestartNcm(); break;
                 case kIdLog:
                     ShellExecuteW(nullptr, L"open", ncmex::ConfigDir(), nullptr, nullptr,
                                   SW_SHOWNORMAL);
@@ -613,12 +553,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 case kIdAutorun: SetAutorun(true); break;
                 case kIdInject: ToggleInjection(); break;
                 case kIdExit: DestroyWindow(hwnd); break;
-                default:
-                    if (LOWORD(wp) >= kIdTargetBase &&
-                        LOWORD(wp) < kIdTargetBase + ncmex::TargetCount()) {
-                        ToggleTarget(LOWORD(wp) - kIdTargetBase);
-                    }
-                    break;
             }
             break;
         default:
@@ -670,7 +604,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR commandLine, int) {
     HANDLE mutex = CreateMutexW(nullptr, TRUE, L"NCMExTray_SingleInstance");
     if (!mutex || GetLastError() == ERROR_ALREADY_EXISTS) return 0;
 
-    ncmex::Log(L"[NCMExTray] 托盘已启动 build=20261024-fix13-multi enable=%d",
+    ncmex::Log(L"[NCMExTray] 托盘已启动 build=20261024-fix14-rollback enable=%d",
                ncmex::ReadEnable());
 
     g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
