@@ -1,0 +1,6 @@
+; NCMExclusive - msimg32.dll 代理导出（全部转发给系统 msimg32.dll，备选变体）
+EXPORTS
+AlphaBlend=msimg32.AlphaBlend
+DllInitialize=msimg32.DllInitialize
+GradientFill=msimg32.GradientFill
+TransparentBlt=msimg32.TransparentBlt

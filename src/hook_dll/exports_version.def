@@ -1,0 +1,20 @@
+; NCMExclusive - version.dll 代理导出（全部转发给系统 version.dll）
+EXPORTS
+GetFileVersionInfoA=version.GetFileVersionInfoA
+GetFileVersionInfoW=version.GetFileVersionInfoW
+GetFileVersionInfoExA=version.GetFileVersionInfoExA
+GetFileVersionInfoExW=version.GetFileVersionInfoExW
+GetFileVersionInfoSizeA=version.GetFileVersionInfoSizeA
+GetFileVersionInfoSizeW=version.GetFileVersionInfoSizeW
+GetFileVersionInfoSizeExA=version.GetFileVersionInfoSizeExA
+GetFileVersionInfoSizeExW=version.GetFileVersionInfoSizeExW
+VerFindFileA=version.VerFindFileA
+VerFindFileW=version.VerFindFileW
+VerInstallFileA=version.VerInstallFileA
+VerInstallFileW=version.VerInstallFileW
+VerLanguageNameA=version.VerLanguageNameA
+VerLanguageNameW=version.VerLanguageNameW
+VerQueryValueA=version.VerQueryValueA
+VerQueryValueW=version.VerQueryValueW
+VerQueryValueExA=version.VerQueryValueExA
+VerQueryValueExW=version.VerQueryValueExW
